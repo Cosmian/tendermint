@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/tendermint/go-amino"
 	"io"
 	"os"
 	"strconv"
@@ -30,8 +31,8 @@ const (
 // replay messages interactively or all at once
 
 // replay the wal file
-func RunReplayFile(config cfg.BaseConfig, csConfig *cfg.ConsensusConfig, console bool) {
-	consensusState := newConsensusStateForReplay(config, csConfig)
+func RunReplayFile(config cfg.BaseConfig, csConfig *cfg.ConsensusConfig, console bool, cdc *amino.Codec) {
+	consensusState := newConsensusStateForReplay(config, csConfig, cdc)
 
 	if err := consensusState.ReplayFile(csConfig.WalFile(), console); err != nil {
 		cmn.Exit(fmt.Sprintf("Error during consensus replay: %v", err))
@@ -279,7 +280,7 @@ func (pb *playback) replayConsoleLoop() int {
 //--------------------------------------------------------------------------------
 
 // convenience for replay mode
-func newConsensusStateForReplay(config cfg.BaseConfig, csConfig *cfg.ConsensusConfig) *ConsensusState {
+func newConsensusStateForReplay(config cfg.BaseConfig, csConfig *cfg.ConsensusConfig, cdc *amino.Codec) *ConsensusState {
 	dbType := dbm.DBBackendType(config.DBBackend)
 	// Get BlockStore
 	blockStoreDB := dbm.NewDB("blockstore", dbType, config.DBDir())
@@ -291,7 +292,7 @@ func newConsensusStateForReplay(config cfg.BaseConfig, csConfig *cfg.ConsensusCo
 	if err != nil {
 		cmn.Exit(err.Error())
 	}
-	state, err := sm.MakeGenesisState(gdoc)
+	state, err := sm.MakeGenesisState(gdoc, cdc)
 	if err != nil {
 		cmn.Exit(err.Error())
 	}
@@ -311,7 +312,7 @@ func newConsensusStateForReplay(config cfg.BaseConfig, csConfig *cfg.ConsensusCo
 	}
 
 	mempool, evpool := sm.MockMempool{}, sm.MockEvidencePool{}
-	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(), mempool, evpool)
+	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(), mempool, evpool, cdc)
 
 	consensusState := NewConsensusState(csConfig, state.Copy(), blockExec,
 		blockStore, mempool, evpool)

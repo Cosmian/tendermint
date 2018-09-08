@@ -124,7 +124,7 @@ func validatorAtHeight(h int64) *types.Validator {
 
 	// If we've moved to the next height, retrieve the validator set from DB.
 	if lastBlockHeight > h {
-		vals, err := sm.LoadValidators(stateDB, h)
+		vals, err := sm.LoadValidators(stateDB, h, cdc)
 		if err != nil {
 			return nil // should not happen
 		}

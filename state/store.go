@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/tendermint/go-amino"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	cmn "github.com/tendermint/tendermint/libs/common"
@@ -26,11 +27,11 @@ func calcABCIResponsesKey(height int64) []byte {
 // LoadStateFromDBOrGenesisFile loads the most recent state from the database,
 // or creates a new one from the given genesisFilePath and persists the result
 // to the database.
-func LoadStateFromDBOrGenesisFile(stateDB dbm.DB, genesisFilePath string) (State, error) {
-	state := LoadState(stateDB)
+func LoadStateFromDBOrGenesisFile(stateDB dbm.DB, genesisFilePath string, cdc *amino.Codec) (State, error) {
+	state := LoadState(stateDB, cdc)
 	if state.IsEmpty() {
 		var err error
-		state, err = MakeGenesisStateFromFile(genesisFilePath)
+		state, err = MakeGenesisStateFromFile(genesisFilePath, cdc)
 		if err != nil {
 			return state, err
 		}
@@ -43,11 +44,11 @@ func LoadStateFromDBOrGenesisFile(stateDB dbm.DB, genesisFilePath string) (State
 // LoadStateFromDBOrGenesisDoc loads the most recent state from the database,
 // or creates a new one from the given genesisDoc and persists the result
 // to the database.
-func LoadStateFromDBOrGenesisDoc(stateDB dbm.DB, genesisDoc *types.GenesisDoc) (State, error) {
-	state := LoadState(stateDB)
+func LoadStateFromDBOrGenesisDoc(stateDB dbm.DB, genesisDoc *types.GenesisDoc, cdc *amino.Codec) (State, error) {
+	state := LoadState(stateDB, cdc)
 	if state.IsEmpty() {
 		var err error
-		state, err = MakeGenesisState(genesisDoc)
+		state, err = MakeGenesisState(genesisDoc, cdc)
 		if err != nil {
 			return state, err
 		}
@@ -58,11 +59,11 @@ func LoadStateFromDBOrGenesisDoc(stateDB dbm.DB, genesisDoc *types.GenesisDoc) (
 }
 
 // LoadState loads the State from the database.
-func LoadState(db dbm.DB) State {
-	return loadState(db, stateKey)
+func LoadState(db dbm.DB, cdc *amino.Codec) State {
+	return loadState(db, stateKey, cdc)
 }
 
-func loadState(db dbm.DB, key []byte) (state State) {
+func loadState(db dbm.DB, key []byte, cdc *amino.Codec) (state State) {
 	buf := db.Get(key)
 	if len(buf) == 0 {
 		return state
@@ -95,7 +96,7 @@ func saveState(db dbm.DB, state State, key []byte) {
 	// Save next validators.
 	saveValidatorsInfo(db, nextHeight+1, state.LastHeightValidatorsChanged, state.NextValidators)
 	// Save next consensus params.
-	saveConsensusParamsInfo(db, nextHeight, state.LastHeightConsensusParamsChanged, state.ConsensusParams)
+	saveConsensusParamsInfo(db, nextHeight, state.LastHeightConsensusParamsChanged, state.ConsensusParams, state.Cdc)
 	db.SetSync(stateKey, state.Bytes())
 }
 
@@ -107,10 +108,11 @@ func saveState(db dbm.DB, state State, key []byte) {
 type ABCIResponses struct {
 	DeliverTx []*abci.ResponseDeliverTx
 	EndBlock  *abci.ResponseEndBlock
+	cdc       *amino.Codec
 }
 
 // NewABCIResponses returns a new ABCIResponses
-func NewABCIResponses(block *types.Block) *ABCIResponses {
+func NewABCIResponses(block *types.Block, cdc *amino.Codec) *ABCIResponses {
 	resDeliverTxs := make([]*abci.ResponseDeliverTx, block.NumTxs)
 	if block.NumTxs == 0 {
 		// This makes Amino encoding/decoding consistent.
@@ -118,12 +120,13 @@ func NewABCIResponses(block *types.Block) *ABCIResponses {
 	}
 	return &ABCIResponses{
 		DeliverTx: resDeliverTxs,
+		cdc:       cdc,
 	}
 }
 
 // Bytes serializes the ABCIResponse using go-amino.
 func (arz *ABCIResponses) Bytes() []byte {
-	return cdc.MustMarshalBinaryBare(arz)
+	return arz.cdc.MustMarshalBinaryBare(arz)
 }
 
 func (arz *ABCIResponses) ResultsHash() []byte {
@@ -134,7 +137,7 @@ func (arz *ABCIResponses) ResultsHash() []byte {
 // LoadABCIResponses loads the ABCIResponses for the given height from the database.
 // This is useful for recovering from crashes where we called app.Commit and before we called
 // s.Save(). It can also be used to produce Merkle proofs of the result of txs.
-func LoadABCIResponses(db dbm.DB, height int64) (*ABCIResponses, error) {
+func LoadABCIResponses(db dbm.DB, height int64, cdc *amino.Codec) (*ABCIResponses, error) {
 	buf := db.Get(calcABCIResponsesKey(height))
 	if len(buf) == 0 {
 		return nil, ErrNoABCIResponsesForHeight{height}
@@ -165,23 +168,24 @@ func saveABCIResponses(db dbm.DB, height int64, abciResponses *ABCIResponses) {
 type ValidatorsInfo struct {
 	ValidatorSet      *types.ValidatorSet
 	LastHeightChanged int64
+	cdc               *amino.Codec
 }
 
 // Bytes serializes the ValidatorsInfo using go-amino.
 func (valInfo *ValidatorsInfo) Bytes() []byte {
-	return cdc.MustMarshalBinaryBare(valInfo)
+	return valInfo.cdc.MustMarshalBinaryBare(valInfo)
 }
 
 // LoadValidators loads the ValidatorSet for a given height.
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
-func LoadValidators(db dbm.DB, height int64) (*types.ValidatorSet, error) {
-	valInfo := loadValidatorsInfo(db, height)
+func LoadValidators(db dbm.DB, height int64, cdc *amino.Codec) (*types.ValidatorSet, error) {
+	valInfo := loadValidatorsInfo(db, height, cdc)
 	if valInfo == nil {
 		return nil, ErrNoValSetForHeight{height}
 	}
 
 	if valInfo.ValidatorSet == nil {
-		valInfo2 := loadValidatorsInfo(db, valInfo.LastHeightChanged)
+		valInfo2 := loadValidatorsInfo(db, valInfo.LastHeightChanged, cdc)
 		if valInfo2 == nil {
 			panic(
 				fmt.Sprintf(
@@ -197,13 +201,14 @@ func LoadValidators(db dbm.DB, height int64) (*types.ValidatorSet, error) {
 	return valInfo.ValidatorSet, nil
 }
 
-func loadValidatorsInfo(db dbm.DB, height int64) *ValidatorsInfo {
+func loadValidatorsInfo(db dbm.DB, height int64, cdc *amino.Codec) *ValidatorsInfo {
 	buf := db.Get(calcValidatorsKey(height))
 	if len(buf) == 0 {
 		return nil
 	}
 
 	v := new(ValidatorsInfo)
+	v.cdc = cdc
 	err := cdc.UnmarshalBinaryBare(buf, v)
 	if err != nil {
 		// DATA HAS BEEN CORRUPTED OR THE SPEC HAS CHANGED
@@ -235,24 +240,25 @@ func saveValidatorsInfo(db dbm.DB, nextHeight, changeHeight int64, valSet *types
 type ConsensusParamsInfo struct {
 	ConsensusParams   types.ConsensusParams
 	LastHeightChanged int64
+	cdc               *amino.Codec
 }
 
 // Bytes serializes the ConsensusParamsInfo using go-amino.
 func (params ConsensusParamsInfo) Bytes() []byte {
-	return cdc.MustMarshalBinaryBare(params)
+	return params.cdc.MustMarshalBinaryBare(params)
 }
 
 // LoadConsensusParams loads the ConsensusParams for a given height.
-func LoadConsensusParams(db dbm.DB, height int64) (types.ConsensusParams, error) {
+func LoadConsensusParams(db dbm.DB, height int64, cdc *amino.Codec) (types.ConsensusParams, error) {
 	empty := types.ConsensusParams{}
 
-	paramsInfo := loadConsensusParamsInfo(db, height)
+	paramsInfo := loadConsensusParamsInfo(db, height, cdc)
 	if paramsInfo == nil {
 		return empty, ErrNoConsensusParamsForHeight{height}
 	}
 
 	if paramsInfo.ConsensusParams == empty {
-		paramsInfo2 := loadConsensusParamsInfo(db, paramsInfo.LastHeightChanged)
+		paramsInfo2 := loadConsensusParamsInfo(db, paramsInfo.LastHeightChanged, cdc)
 		if paramsInfo2 == nil {
 			panic(
 				fmt.Sprintf(
@@ -268,13 +274,14 @@ func LoadConsensusParams(db dbm.DB, height int64) (types.ConsensusParams, error)
 	return paramsInfo.ConsensusParams, nil
 }
 
-func loadConsensusParamsInfo(db dbm.DB, height int64) *ConsensusParamsInfo {
+func loadConsensusParamsInfo(db dbm.DB, height int64, cdc *amino.Codec) *ConsensusParamsInfo {
 	buf := db.Get(calcConsensusParamsKey(height))
 	if len(buf) == 0 {
 		return nil
 	}
 
 	paramsInfo := new(ConsensusParamsInfo)
+	paramsInfo.cdc = cdc
 	err := cdc.UnmarshalBinaryBare(buf, paramsInfo)
 	if err != nil {
 		// DATA HAS BEEN CORRUPTED OR THE SPEC HAS CHANGED
@@ -290,9 +297,10 @@ func loadConsensusParamsInfo(db dbm.DB, height int64) *ConsensusParamsInfo {
 // It should be called from s.Save(), right before the state itself is persisted.
 // If the consensus params did not change after processing the latest block,
 // only the last height for which they changed is persisted.
-func saveConsensusParamsInfo(db dbm.DB, nextHeight, changeHeight int64, params types.ConsensusParams) {
+func saveConsensusParamsInfo(db dbm.DB, nextHeight, changeHeight int64, params types.ConsensusParams, cdc *amino.Codec) {
 	paramsInfo := &ConsensusParamsInfo{
 		LastHeightChanged: changeHeight,
+		cdc:               cdc,
 	}
 	if changeHeight == nextHeight {
 		paramsInfo.ConsensusParams = params

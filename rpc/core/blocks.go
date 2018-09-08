@@ -358,7 +358,7 @@ func BlockResults(heightPtr *int64) (*ctypes.ResultBlockResults, error) {
 	}
 
 	// load the results
-	results, err := sm.LoadABCIResponses(stateDB, height)
+	results, err := sm.LoadABCIResponses(stateDB, height, cdc)
 	if err != nil {
 		return nil, err
 	}

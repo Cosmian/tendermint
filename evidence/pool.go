@@ -2,9 +2,10 @@ package evidence
 
 import (
 	"fmt"
+	"github.com/tendermint/go-amino"
 	"sync"
 
-	clist "github.com/tendermint/tendermint/libs/clist"
+	"github.com/tendermint/tendermint/libs/clist"
 	dbm "github.com/tendermint/tendermint/libs/db"
 	"github.com/tendermint/tendermint/libs/log"
 
@@ -28,10 +29,10 @@ type EvidencePool struct {
 	state sm.State
 }
 
-func NewEvidencePool(stateDB dbm.DB, evidenceStore *EvidenceStore) *EvidencePool {
+func NewEvidencePool(stateDB dbm.DB, evidenceStore *EvidenceStore, cdc *amino.Codec) *EvidencePool {
 	evpool := &EvidencePool{
 		stateDB:       stateDB,
-		state:         sm.LoadState(stateDB),
+		state:         sm.LoadState(stateDB, cdc),
 		logger:        log.NewNopLogger(),
 		evidenceStore: evidenceStore,
 		evidenceList:  clist.New(),
@@ -99,7 +100,7 @@ func (evpool *EvidencePool) AddEvidence(evidence types.Evidence) (err error) {
 
 	// fetch the validator and return its voting power as its priority
 	// TODO: something better ?
-	valset, _ := sm.LoadValidators(evpool.stateDB, evidence.Height())
+	valset, _ := sm.LoadValidators(evpool.stateDB, evidence.Height(), evpool.State().Cdc)
 	_, val := valset.GetByAddress(evidence.Address())
 	priority := val.VotingPower
 

@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"fmt"
+	"github.com/tendermint/go-amino"
 	"io/ioutil"
 	"time"
 
@@ -54,6 +55,9 @@ type State struct {
 
 	// the latest AppHash we've received from calling abci.Commit()
 	AppHash []byte
+
+	// the Amino Codec used to marshal and unmarshal values
+	Cdc *amino.Codec
 }
 
 // Copy makes a copy of the State for mutating.
@@ -77,6 +81,8 @@ func (state State) Copy() State {
 		AppHash: state.AppHash,
 
 		LastResultsHash: state.LastResultsHash,
+
+		Cdc: state.Cdc,
 	}
 }
 
@@ -88,7 +94,7 @@ func (state State) Equals(state2 State) bool {
 
 // Bytes serializes the State using go-amino.
 func (state State) Bytes() []byte {
-	return cdc.MustMarshalBinaryBare(state)
+	return state.Cdc.MustMarshalBinaryBare(state)
 }
 
 // IsEmpty returns true if the State is equal to the empty State.
@@ -169,12 +175,12 @@ func MedianTime(commit *types.Commit, validators *types.ValidatorSet) time.Time 
 // file.
 //
 // Used during replay and in tests.
-func MakeGenesisStateFromFile(genDocFile string) (State, error) {
+func MakeGenesisStateFromFile(genDocFile string, cdc *amino.Codec) (State, error) {
 	genDoc, err := MakeGenesisDocFromFile(genDocFile)
 	if err != nil {
 		return State{}, err
 	}
-	return MakeGenesisState(genDoc)
+	return MakeGenesisState(genDoc, cdc)
 }
 
 // MakeGenesisDocFromFile reads and unmarshals genesis doc from the given file.
@@ -191,7 +197,7 @@ func MakeGenesisDocFromFile(genDocFile string) (*types.GenesisDoc, error) {
 }
 
 // MakeGenesisState creates state from types.GenesisDoc.
-func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
+func MakeGenesisState(genDoc *types.GenesisDoc, cdc *amino.Codec) (State, error) {
 	err := genDoc.ValidateAndComplete()
 	if err != nil {
 		return State{}, fmt.Errorf("Error in genesis file: %v", err)
@@ -228,5 +234,7 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		LastHeightConsensusParamsChanged: 1,
 
 		AppHash: genDoc.AppHash,
+
+		Cdc: cdc,
 	}, nil
 }

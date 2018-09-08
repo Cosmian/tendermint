@@ -52,7 +52,7 @@ func Validators(heightPtr *int64) (*ctypes.ResultValidators, error) {
 		return nil, err
 	}
 
-	validators, err := sm.LoadValidators(stateDB, height)
+	validators, err := sm.LoadValidators(stateDB, height, cdc)
 	if err != nil {
 		return nil, err
 	}

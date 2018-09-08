@@ -76,7 +76,7 @@ func DefaultGenesisDocProviderFunc(config *cfg.Config) GenesisDocProvider {
 }
 
 // NodeProvider takes a config and a logger and returns a ready to go Node.
-type NodeProvider func(*cfg.Config, log.Logger,*amino.Codec) (*Node, error)
+type NodeProvider func(*cfg.Config, log.Logger, *amino.Codec) (*Node, error)
 
 // DefaultNewNode returns a Tendermint node with default settings for the
 // PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
@@ -146,6 +146,9 @@ type Node struct {
 	txIndexer        txindex.TxIndexer
 	indexerService   *txindex.IndexerService
 	prometheusSrv    *http.Server
+
+	// amino
+	cdc *amino.Codec
 }
 
 // NewNode returns a new, ready to go, Tendermint Node.
@@ -185,7 +188,7 @@ func NewNode(config *cfg.Config,
 		saveGenesisDoc(stateDB, genDoc, cdc)
 	}
 
-	state, err := sm.LoadStateFromDBOrGenesisDoc(stateDB, genDoc)
+	state, err := sm.LoadStateFromDBOrGenesisDoc(stateDB, genDoc, cdc)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +206,7 @@ func NewNode(config *cfg.Config,
 	}
 
 	// reload the state (it may have been updated by the handshake)
-	state = sm.LoadState(stateDB)
+	state = sm.LoadState(stateDB, cdc)
 
 	// If an address is provided, listen on the socket for a
 	// connection from an external signing process.
@@ -271,14 +274,14 @@ func NewNode(config *cfg.Config,
 	}
 	evidenceLogger := logger.With("module", "evidence")
 	evidenceStore := evidence.NewEvidenceStore(evidenceDB)
-	evidencePool := evidence.NewEvidencePool(stateDB, evidenceStore)
+	evidencePool := evidence.NewEvidencePool(stateDB, evidenceStore, cdc)
 	evidencePool.SetLogger(evidenceLogger)
 	evidenceReactor := evidence.NewEvidenceReactor(evidencePool)
 	evidenceReactor.SetLogger(evidenceLogger)
 
 	blockExecLogger := logger.With("module", "state")
 	// make block executor for consensus and blockchain reactors to execute blocks
-	blockExec := sm.NewBlockExecutor(stateDB, blockExecLogger, proxyApp.Consensus(), mempool, evidencePool)
+	blockExec := sm.NewBlockExecutor(stateDB, blockExecLogger, proxyApp.Consensus(), mempool, evidencePool, cdc)
 
 	// Make BlockchainReactor
 	bcReactor := bc.NewBlockchainReactor(state.Copy(), blockExec, blockStore, fastSync)
@@ -422,6 +425,7 @@ func NewNode(config *cfg.Config,
 		txIndexer:        txIndexer,
 		indexerService:   indexerService,
 		eventBus:         eventBus,
+		cdc:              cdc,
 	}
 	node.BaseService = *cmn.NewBaseService(logger, "Node", node)
 	return node, nil
@@ -539,6 +543,7 @@ func (n *Node) AddListener(l p2p.Listener) {
 // ConfigureRPC sets all variables in rpccore so they will serve
 // rpc calls from this node
 func (n *Node) ConfigureRPC() {
+	rpccore.SetAminoCodec(n.cdc)
 	rpccore.SetStateDB(n.stateDB)
 	rpccore.SetBlockStore(n.blockStore)
 	rpccore.SetConsensusState(n.consensusState)

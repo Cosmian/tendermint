@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/tendermint/go-amino"
+	"github.com/tendermint/tendermint/crypto/encoding/amino"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +41,10 @@ func WALWithNBlocks(numBlocks int) (data []byte, err error) {
 	/////////////////////////////////////////////////////////////////////////////
 	// COPY PASTE FROM node.go WITH A FEW MODIFICATIONS
 	// NOTE: we can't import node package because of circular dependency
+	// BGR: added amino injection
+	cdc :=amino.NewCodec()
+	cryptoAmino.RegisterAmino(cdc)
+	// END BGR
 	privValidatorFile := config.PrivValidatorFile()
 	privValidator := privval.LoadOrGenFilePV(privValidatorFile)
 	genDoc, err := types.GenesisDocFromFile(config.GenesisFile())
@@ -47,7 +53,7 @@ func WALWithNBlocks(numBlocks int) (data []byte, err error) {
 	}
 	stateDB := db.NewMemDB()
 	blockStoreDB := db.NewMemDB()
-	state, err := sm.MakeGenesisState(genDoc)
+	state, err := sm.MakeGenesisState(genDoc, cdc)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make genesis state")
 	}
@@ -67,7 +73,7 @@ func WALWithNBlocks(numBlocks int) (data []byte, err error) {
 	defer eventBus.Stop()
 	mempool := sm.MockMempool{}
 	evpool := sm.MockEvidencePool{}
-	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(), mempool, evpool)
+	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(), mempool, evpool, cdc)
 	consensusState := NewConsensusState(config.Consensus, state.Copy(), blockExec, blockStore, mempool, evpool)
 	consensusState.SetLogger(logger)
 	consensusState.SetEventBus(eventBus)

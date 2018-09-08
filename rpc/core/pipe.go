@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/tendermint/go-amino"
 	"time"
 
 	"github.com/tendermint/tendermint/consensus"
@@ -68,7 +69,13 @@ var (
 	mempool          *mempl.Mempool
 
 	logger log.Logger
+
+	cdc *amino.Codec
 )
+
+func SetAminoCodec(codec *amino.Codec) {
+	cdc = codec
+}
 
 func SetStateDB(db dbm.DB) {
 	stateDB = db

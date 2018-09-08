@@ -2,8 +2,9 @@ package state
 
 import (
 	"fmt"
+	"github.com/tendermint/go-amino"
 
-	fail "github.com/ebuchman/fail-test"
+	"github.com/ebuchman/fail-test"
 	abci "github.com/tendermint/tendermint/abci/types"
 	dbm "github.com/tendermint/tendermint/libs/db"
 	"github.com/tendermint/tendermint/libs/log"
@@ -32,12 +33,15 @@ type BlockExecutor struct {
 	evpool  EvidencePool
 
 	logger log.Logger
+
+	// the amino codec used to marshal and unmarshal structures
+	cdc *amino.Codec
 }
 
 // NewBlockExecutor returns a new BlockExecutor with a NopEventBus.
 // Call SetEventBus to provide one.
 func NewBlockExecutor(db dbm.DB, logger log.Logger, proxyApp proxy.AppConnConsensus,
-	mempool Mempool, evpool EvidencePool) *BlockExecutor {
+	mempool Mempool, evpool EvidencePool, cdc *amino.Codec) *BlockExecutor {
 	return &BlockExecutor{
 		db:       db,
 		proxyApp: proxyApp,
@@ -45,6 +49,7 @@ func NewBlockExecutor(db dbm.DB, logger log.Logger, proxyApp proxy.AppConnConsen
 		mempool:  mempool,
 		evpool:   evpool,
 		logger:   logger,
+		cdc:      cdc,
 	}
 }
 
@@ -73,7 +78,7 @@ func (blockExec *BlockExecutor) ApplyBlock(state State, blockID types.BlockID, b
 		return state, ErrInvalidBlock(err)
 	}
 
-	abciResponses, err := execBlockOnProxyApp(blockExec.logger, blockExec.proxyApp, block, state.LastValidators, blockExec.db)
+	abciResponses, err := execBlockOnProxyApp(blockExec.logger, blockExec.proxyApp, block, state.LastValidators, blockExec.db, blockExec.cdc)
 	if err != nil {
 		return state, ErrProxyAppConn(err)
 	}
@@ -160,11 +165,11 @@ func (blockExec *BlockExecutor) Commit(state State, block *types.Block) ([]byte,
 // Executes block's transactions on proxyAppConn.
 // Returns a list of transaction results and updates to the validator set
 func execBlockOnProxyApp(logger log.Logger, proxyAppConn proxy.AppConnConsensus,
-	block *types.Block, lastValSet *types.ValidatorSet, stateDB dbm.DB) (*ABCIResponses, error) {
+	block *types.Block, lastValSet *types.ValidatorSet, stateDB dbm.DB, cdc *amino.Codec) (*ABCIResponses, error) {
 	var validTxs, invalidTxs = 0, 0
 
 	txIndex := 0
-	abciResponses := NewABCIResponses(block)
+	abciResponses := NewABCIResponses(block, cdc)
 
 	// Execute transactions and get hash.
 	proxyCb := func(req *abci.Request, res *abci.Response) {
@@ -186,7 +191,7 @@ func execBlockOnProxyApp(logger log.Logger, proxyAppConn proxy.AppConnConsensus,
 	}
 	proxyAppConn.SetResponseCallback(proxyCb)
 
-	commitInfo, byzVals := getBeginBlockValidatorInfo(block, lastValSet, stateDB)
+	commitInfo, byzVals := getBeginBlockValidatorInfo(block, lastValSet, stateDB, cdc)
 
 	// Begin block.
 	_, err := proxyAppConn.BeginBlockSync(abci.RequestBeginBlock{
@@ -226,7 +231,7 @@ func execBlockOnProxyApp(logger log.Logger, proxyAppConn proxy.AppConnConsensus,
 	return abciResponses, nil
 }
 
-func getBeginBlockValidatorInfo(block *types.Block, lastValSet *types.ValidatorSet, stateDB dbm.DB) (abci.LastCommitInfo, []abci.Evidence) {
+func getBeginBlockValidatorInfo(block *types.Block, lastValSet *types.ValidatorSet, stateDB dbm.DB, cdc *amino.Codec) (abci.LastCommitInfo, []abci.Evidence) {
 
 	// Sanity check that commit length matches validator set size -
 	// only applies after first block
@@ -264,7 +269,7 @@ func getBeginBlockValidatorInfo(block *types.Block, lastValSet *types.ValidatorS
 		// We need the validator set. We already did this in validateBlock.
 		// TODO: Should we instead cache the valset in the evidence itself and add
 		// `SetValidatorSet()` and `ToABCI` methods ?
-		valset, err := LoadValidators(stateDB, ev.Height())
+		valset, err := LoadValidators(stateDB, ev.Height(), cdc)
 		if err != nil {
 			panic(err) // shouldn't happen
 		}
@@ -401,8 +406,8 @@ func fireEvents(logger log.Logger, eventBus types.BlockEventPublisher, block *ty
 // ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
 // It returns the application root hash (result of abci.Commit).
 func ExecCommitBlock(appConnConsensus proxy.AppConnConsensus, block *types.Block,
-	logger log.Logger, lastValSet *types.ValidatorSet, stateDB dbm.DB) ([]byte, error) {
-	_, err := execBlockOnProxyApp(logger, appConnConsensus, block, lastValSet, stateDB)
+	logger log.Logger, lastValSet *types.ValidatorSet, stateDB dbm.DB, cdc *amino.Codec) ([]byte, error) {
+	_, err := execBlockOnProxyApp(logger, appConnConsensus, block, lastValSet, stateDB, cdc)
 	if err != nil {
 		logger.Error("Error executing block on proxy app", "height", block.Height, "err", err)
 		return nil, err
