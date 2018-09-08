@@ -13,8 +13,8 @@ import (
 
 func TestInquirerValidPath(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
-	trust := NewDBProvider("trust", dbm.NewMemDB())
-	source := NewDBProvider("source", dbm.NewMemDB())
+	trust := NewDBProvider("trust", dbm.NewMemDB(),nil)
+	source := NewDBProvider("source", dbm.NewMemDB(), nil)
 
 	// Set up the validators to generate test blocks.
 	var vote int64 = 10
@@ -71,8 +71,8 @@ func TestInquirerValidPath(t *testing.T) {
 
 func TestInquirerVerifyHistorical(t *testing.T) {
 	assert, require := assert.New(t), require.New(t)
-	trust := NewDBProvider("trust", dbm.NewMemDB())
-	source := NewDBProvider("source", dbm.NewMemDB())
+	trust := NewDBProvider("trust", dbm.NewMemDB(), nil)
+	source := NewDBProvider("source", dbm.NewMemDB(), nil)
 
 	// Set up the validators to generate test blocks.
 	var vote int64 = 10

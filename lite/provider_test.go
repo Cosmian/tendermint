@@ -32,14 +32,14 @@ func (missingProvider) ValidatorSet(chainID string, height int64) (*types.Valida
 func (missingProvider) SetLogger(_ log.Logger) {}
 
 func TestMemProvider(t *testing.T) {
-	p := NewDBProvider("mem", dbm.NewMemDB())
+	p := NewDBProvider("mem", dbm.NewMemDB(),nil)
 	checkProvider(t, p, "test-mem", "empty")
 }
 
 func TestMultiProvider(t *testing.T) {
 	p := NewMultiProvider(
 		NewMissingProvider(),
-		NewDBProvider("mem", dbm.NewMemDB()),
+		NewDBProvider("mem", dbm.NewMemDB(), nil),
 		NewMissingProvider(),
 	)
 	checkProvider(t, p, "test-cache", "kjfhekfhkewhgit")
@@ -107,8 +107,8 @@ func TestMultiLatestFullCommit(t *testing.T) {
 
 	// We will write data to the second level of the cache (p2), and see what
 	// gets cached/stored in.
-	p := NewDBProvider("mem1", dbm.NewMemDB())
-	p2 := NewDBProvider("mem2", dbm.NewMemDB())
+	p := NewDBProvider("mem1", dbm.NewMemDB(), nil)
+	p2 := NewDBProvider("mem2", dbm.NewMemDB(), nil)
 	cp := NewMultiProvider(p, p2)
 
 	chainID := "cache-best-height"
