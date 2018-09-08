@@ -17,6 +17,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+func init() {
+	RegisterAminoDefaults()
+}
+
 // setupTestCase does setup common to all test cases.
 func setupTestCase(t *testing.T) (func(t *testing.T), dbm.DB, State) {
 	config := cfg.ResetTestRoot("state_")
