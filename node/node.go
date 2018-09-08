@@ -86,6 +86,7 @@ func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 	cryptoAmino.RegisterAminoDefaults()
 	RegisterAminoDefaults()
 	sm.RegisterAminoDefaults()
+	evidence.RegisterAminoDefaults()
 	// Generate node PrivKey
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	if err != nil {
