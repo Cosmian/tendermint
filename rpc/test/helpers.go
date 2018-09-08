@@ -3,6 +3,7 @@ package rpctest
 import (
 	"context"
 	"fmt"
+	"github.com/tendermint/go-amino"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,6 +116,7 @@ func StartTendermint(app abci.Application) *nm.Node {
 // NewTendermint creates a new tendermint server and sleeps forever
 func NewTendermint(app abci.Application) *nm.Node {
 	// Create & start node
+	cdc := amino.NewCodec()
 	config := GetConfig()
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	logger = log.NewFilter(logger, log.AllowError())
@@ -129,7 +131,8 @@ func NewTendermint(app abci.Application) *nm.Node {
 		nm.DefaultGenesisDocProviderFunc(config),
 		nm.DefaultDBProvider,
 		nm.DefaultMetricsProvider(config.Instrumentation),
-		logger)
+		logger,
+		cdc)
 	if err != nil {
 		panic(err)
 	}

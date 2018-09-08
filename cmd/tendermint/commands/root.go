@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/tendermint/go-amino"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 var (
 	config = cfg.DefaultConfig()
 	logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	cdc    = amino.NewCodec()
 )
 
 func init() {

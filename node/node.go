@@ -5,13 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tendermint/tendermint/crypto/encoding/amino"
 	"net"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	amino "github.com/tendermint/go-amino"
+	"github.com/tendermint/go-amino"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cmn "github.com/tendermint/tendermint/libs/common"
@@ -30,8 +31,8 @@ import (
 	rpccore "github.com/tendermint/tendermint/rpc/core"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	grpccore "github.com/tendermint/tendermint/rpc/grpc"
-	rpc "github.com/tendermint/tendermint/rpc/lib"
-	rpcserver "github.com/tendermint/tendermint/rpc/lib/server"
+	"github.com/tendermint/tendermint/rpc/lib"
+	"github.com/tendermint/tendermint/rpc/lib/server"
 	sm "github.com/tendermint/tendermint/state"
 	"github.com/tendermint/tendermint/state/txindex"
 	"github.com/tendermint/tendermint/state/txindex/kv"
@@ -75,12 +76,14 @@ func DefaultGenesisDocProviderFunc(config *cfg.Config) GenesisDocProvider {
 }
 
 // NodeProvider takes a config and a logger and returns a ready to go Node.
-type NodeProvider func(*cfg.Config, log.Logger) (*Node, error)
+type NodeProvider func(*cfg.Config, log.Logger,*amino.Codec) (*Node, error)
 
 // DefaultNewNode returns a Tendermint node with default settings for the
 // PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
 // It implements NodeProvider.
-func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
+func DefaultNewNode(config *cfg.Config, logger log.Logger, cdc *amino.Codec) (*Node, error) {
+	// register the codecs required for the default Priv Validator
+	cryptoAmino.RegisterAmino(cdc)
 	// Generate node PrivKey
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	if err != nil {
@@ -94,6 +97,7 @@ func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 		DefaultDBProvider,
 		DefaultMetricsProvider(config.Instrumentation),
 		logger,
+		cdc,
 	)
 }
 
@@ -152,7 +156,8 @@ func NewNode(config *cfg.Config,
 	genesisDocProvider GenesisDocProvider,
 	dbProvider DBProvider,
 	metricsProvider MetricsProvider,
-	logger log.Logger) (*Node, error) {
+	logger log.Logger,
+	cdc *amino.Codec) (*Node, error) {
 
 	// Get BlockStore
 	blockStoreDB, err := dbProvider(&DBContext{"blockstore", config})
@@ -169,7 +174,7 @@ func NewNode(config *cfg.Config,
 
 	// Get genesis doc
 	// TODO: move to state package?
-	genDoc, err := loadGenesisDoc(stateDB)
+	genDoc, err := loadGenesisDoc(stateDB, cdc)
 	if err != nil {
 		genDoc, err = genesisDocProvider()
 		if err != nil {
@@ -177,7 +182,7 @@ func NewNode(config *cfg.Config,
 		}
 		// save genesis doc to prevent a certain class of user errors (e.g. when it
 		// was changed, accidentally or not). Also good for audit trail.
-		saveGenesisDoc(stateDB, genDoc)
+		saveGenesisDoc(stateDB, genDoc, cdc)
 	}
 
 	state, err := sm.LoadStateFromDBOrGenesisDoc(stateDB, genDoc)
@@ -729,7 +734,7 @@ var (
 )
 
 // panics if failed to unmarshal bytes
-func loadGenesisDoc(db dbm.DB) (*types.GenesisDoc, error) {
+func loadGenesisDoc(db dbm.DB, cdc *amino.Codec) (*types.GenesisDoc, error) {
 	bytes := db.Get(genesisDocKey)
 	if len(bytes) == 0 {
 		return nil, errors.New("Genesis doc not found")
@@ -743,14 +748,13 @@ func loadGenesisDoc(db dbm.DB) (*types.GenesisDoc, error) {
 }
 
 // panics if failed to marshal the given genesis document
-func saveGenesisDoc(db dbm.DB, genDoc *types.GenesisDoc) {
+func saveGenesisDoc(db dbm.DB, genDoc *types.GenesisDoc, cdc *amino.Codec) {
 	bytes, err := cdc.MarshalJSON(genDoc)
 	if err != nil {
 		cmn.PanicCrisis(fmt.Sprintf("Failed to save genesis doc due to marshaling error: %v", err))
 	}
 	db.SetSync(genesisDocKey, bytes)
 }
-
 
 // splitAndTrimEmpty slices s into all subslices separated by sep and returns a
 // slice of the string s with all leading and trailing Unicode code points

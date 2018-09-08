@@ -50,7 +50,7 @@ func NewRunNodeCmd(nodeProvider nm.NodeProvider) *cobra.Command {
 		Short: "Run the tendermint node",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Create & start node
-			n, err := nodeProvider(config, logger)
+			n, err := nodeProvider(config, logger, cdc)
 			if err != nil {
 				return fmt.Errorf("Failed to create node: %v", err)
 			}

@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/tendermint/go-amino"
 	"os"
 	"syscall"
 	"testing"
@@ -17,10 +18,11 @@ import (
 )
 
 func TestNodeStartStop(t *testing.T) {
+	cdc := amino.NewCodec()
 	config := cfg.ResetTestRoot("node_node_test")
 
 	// create & start node
-	n, err := DefaultNewNode(config, log.TestingLogger())
+	n, err := DefaultNewNode(config, log.TestingLogger(),cdc)
 	assert.NoError(t, err, "expected no err on DefaultNewNode")
 	err1 := n.Start()
 	if err1 != nil {
