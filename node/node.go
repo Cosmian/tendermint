@@ -83,11 +83,13 @@ type NodeProvider func(*cfg.Config, log.Logger) (*Node, error)
 // It implements NodeProvider.
 func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 	// register the default types with Amino
+	types.RegisterAminoDefaults()
 	RegisterAminoDefaults()
 	sm.RegisterAminoDefaults()
 	evidence.RegisterAminoDefaults()
 	p2p.RegisterAminoDefaults()
 	conn.RegisterAminoDefaults()
+	privval.RegisterAminoDefaults()
 	// Generate node PrivKey
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	if err != nil {

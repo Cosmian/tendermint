@@ -15,6 +15,10 @@ import (
 	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
+func init() {
+	RegisterAminoDefaults()
+}
+
 func TestGenLoadValidator(t *testing.T) {
 	assert := assert.New(t)
 
