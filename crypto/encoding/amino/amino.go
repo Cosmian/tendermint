@@ -11,14 +11,21 @@ import (
 
 var cdc = amino.NewCodec()
 
-func init() {
+// RegisterAminoDefaults registers with amino the types used by default keys marshalling and unmarshalling
+func RegisterAminoDefaults() {
 	// NOTE: It's important that there be no conflicts here,
 	// as that would change the canonical representations,
 	// and therefore change the address.
 	// TODO: Remove above note when
 	// https://github.com/tendermint/go-amino/issues/9
 	// is resolved
-	RegisterAmino(cdc)
+	RegisterAminoCustom(RegisterAmino)
+}
+
+// RegisterAmino is used to register types with amino that are used for default custom keys marshalling and unmarshalling
+// see cryptoAmino.RegisterAmino() for an example registration
+func RegisterAminoCustom(register func(cdc *amino.Codec) ) {
+	register(cdc)
 }
 
 // RegisterAmino registers all crypto related types in the given (amino) codec.
