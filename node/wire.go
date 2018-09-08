@@ -7,6 +7,13 @@ import (
 
 var cdc = amino.NewCodec()
 
-func init() {
-	cryptoAmino.RegisterAmino(cdc)
+// RegisterAminoDefaults registers with amino the types used by the DefaultNewNode
+func RegisterAminoDefaults() {
+	RegisterAmino(cryptoAmino.RegisterAmino)
+}
+
+// RegisterAmino is used to register types with amino that used by the node package
+// see cryptoAmino.RegisterAmino() for an example registration
+func RegisterAmino(register func(cdc *amino.Codec) ) {
+	register(cdc)
 }
