@@ -28,9 +28,13 @@ const (
 
 // TM2PB is used for converting Tendermint ABCI to protobuf ABCI.
 // UNSTABLE
-var TM2PB = tm2pb{}
+var TM2PB = tm2pb{
+	nil,
+}
 
-type tm2pb struct{}
+type tm2pb struct{
+	customPubKeyConverter func(pubKey crypto.PubKey) abci.PubKey
+}
 
 func (tm2pb) Header(header *Header) abci.Header {
 	return abci.Header{
@@ -84,9 +88,17 @@ func (tm2pb) ValidatorUpdate(val *Validator) abci.ValidatorUpdate {
 	}
 }
 
+// SetCustomPubKeyConverter sets a custom converter that converts crypto.PubKey to abci.PubKey
+// when using a type of crypto.Pubkey which not one of the system defaults (keys for curves
+// Edwards 25519 and 'bitcoin' Secp256k1
+//
+// The converter should panic if the key type is unknown
+func (t *tm2pb) SetCustomPubKeyConverter(converter func(pubKey crypto.PubKey) abci.PubKey)  {
+	t.customPubKeyConverter = converter
+}
+
 // XXX: panics on nil or unknown pubkey type
-// TODO: add cases when new pubkey types are added to crypto
-func (tm2pb) PubKey(pubKey crypto.PubKey) abci.PubKey {
+func (t *tm2pb) PubKey(pubKey crypto.PubKey) abci.PubKey {
 	switch pk := pubKey.(type) {
 	case ed25519.PubKeyEd25519:
 		return abci.PubKey{
@@ -99,7 +111,10 @@ func (tm2pb) PubKey(pubKey crypto.PubKey) abci.PubKey {
 			Data: pk[:],
 		}
 	default:
-		panic(fmt.Sprintf("unknown pubkey type: %v %v", pubKey, reflect.TypeOf(pubKey)))
+		if t.customPubKeyConverter == nil {
+			panic(fmt.Sprintf("unknown pubkey type: %v %v", pubKey, reflect.TypeOf(pubKey)))
+		}
+		return t.customPubKeyConverter(pubKey)
 	}
 }
 
