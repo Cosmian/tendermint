@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto/encoding/amino"
 	"net"
 	"net/http"
 
@@ -83,7 +82,6 @@ type NodeProvider func(*cfg.Config, log.Logger) (*Node, error)
 // It implements NodeProvider.
 func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 	// register the default types with Amino
-	cryptoAmino.RegisterAminoDefaults()
 	RegisterAminoDefaults()
 	sm.RegisterAminoDefaults()
 	evidence.RegisterAminoDefaults()

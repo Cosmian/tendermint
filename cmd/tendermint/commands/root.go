@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/tendermint/tendermint/crypto/encoding/amino"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,9 @@ var (
 
 func init() {
 	registerFlagsRootCmd(RootCmd)
+	// register the default types with Amino
+	cryptoAmino.RegisterAminoDefaults()
+	RegisterAminoDefaults()
 }
 
 func registerFlagsRootCmd(cmd *cobra.Command) {
