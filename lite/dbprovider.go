@@ -21,13 +21,20 @@ type DBProvider struct {
 	limit  int
 }
 
-func NewDBProvider(label string, db dbm.DB) *DBProvider {
+// NewDBProvider regisers a new DBProvider
+//
+// If registerAmino is nil the default crypto.RegisterAmino() will be called
+func NewDBProvider(label string, db dbm.DB, registerAmino func(cdc *amino.Codec)) *DBProvider {
 
 	// NOTE: when debugging, this type of construction might be useful.
 	//db = dbm.NewDebugDB("db provider "+cmn.RandStr(4), db)
 
 	cdc := amino.NewCodec()
-	cryptoAmino.RegisterAmino(cdc)
+	if registerAmino!= nil {
+		registerAmino(cdc)
+	} else {
+		cryptoAmino.RegisterAmino(cdc)
+	}
 	dbp := &DBProvider{
 		logger: log.NewNopLogger(),
 		label:  label,
