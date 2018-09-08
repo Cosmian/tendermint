@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tendermint/tendermint/p2p/conn"
 	"net"
 	"net/http"
 
@@ -85,6 +86,8 @@ func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 	RegisterAminoDefaults()
 	sm.RegisterAminoDefaults()
 	evidence.RegisterAminoDefaults()
+	p2p.RegisterAminoDefaults()
+	conn.RegisterAminoDefaults()
 	// Generate node PrivKey
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
 	if err != nil {
