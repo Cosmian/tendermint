@@ -26,6 +26,10 @@ const (
 
 //-------------------------------------------------------
 
+// TMKeyConverter is a function that converts a cypto.PubKey
+// to a protobuf abci.PubKey
+type TMKeyConverter = func(crypto.PubKey) abci.PubKey
+
 // TM2PB is used for converting Tendermint ABCI to protobuf ABCI.
 // UNSTABLE
 var TM2PB = tm2pb{
@@ -33,7 +37,7 @@ var TM2PB = tm2pb{
 }
 
 type tm2pb struct{
-	customPubKeyConverter func(pubKey crypto.PubKey) abci.PubKey
+	customPubKeyConverter TMKeyConverter
 }
 
 func (tm2pb) Header(header *Header) abci.Header {
@@ -86,15 +90,6 @@ func (tm2pb) ValidatorUpdate(val *Validator) abci.ValidatorUpdate {
 		PubKey: TM2PB.PubKey(val.PubKey),
 		Power:  val.VotingPower,
 	}
-}
-
-// SetCustomPubKeyConverter sets a custom converter that converts crypto.PubKey to abci.PubKey
-// when using a type of crypto.Pubkey which not one of the system defaults (keys for curves
-// Edwards 25519 and 'bitcoin' Secp256k1
-//
-// The converter should panic if the key type is unknown
-func (t *tm2pb) SetCustomPubKeyConverter(converter func(pubKey crypto.PubKey) abci.PubKey)  {
-	t.customPubKeyConverter = converter
 }
 
 // XXX: panics on nil or unknown pubkey type
@@ -183,15 +178,33 @@ func (tm2pb) NewValidatorUpdate(pubkey crypto.PubKey, power int64) abci.Validato
 	}
 }
 
+// SetCustomTMPubKeyConverter sets a custom converter that converts a crypto.PubKey to a abci.PubKey
+// when using a type of crypto.Pubkey which is not one of the system defaults (keys for curves
+// Edwards 25519 and 'bitcoin' Secp256k1
+//
+// The converter should panic if the key type is unknown
+//
+// This converter setter should be called together with SetCustomPBPubKeyConverter
+// and encoding.RegisterAminoCustomKeys to register the custom key types with amino
+func (tm *tm2pb) SetCustomTMPubKeyConverter(converter TMKeyConverter) {
+	tm.customPubKeyConverter = converter
+}
+
 //----------------------------------------------------------------------------
+
+// PBKeyConverter is a function that converts a protobuf  abci.PubKey
+// to a 'tendermint' crypto.PubKey
+type PBKeyConverter = func(abci.PubKey) (crypto.PubKey, error)
 
 // PB2TM is used for converting protobuf ABCI to Tendermint ABCI.
 // UNSTABLE
 var PB2TM = pb2tm{}
 
-type pb2tm struct{}
+type pb2tm struct{
+	customPubKeyConverter PBKeyConverter
+}
 
-func (pb2tm) PubKey(pubKey abci.PubKey) (crypto.PubKey, error) {
+func (pb *pb2tm) PubKey(pubKey abci.PubKey) (crypto.PubKey, error) {
 	// TODO: define these in crypto and use them
 	sizeEd := 32
 	sizeSecp := 33
@@ -211,7 +224,10 @@ func (pb2tm) PubKey(pubKey abci.PubKey) (crypto.PubKey, error) {
 		copy(pk[:], pubKey.Data)
 		return pk, nil
 	default:
-		return nil, fmt.Errorf("Unknown pubkey type %v", pubKey.Type)
+		if pb.customPubKeyConverter == nil {
+			return nil, fmt.Errorf("unknown pubkey type: %v %v", pubKey, reflect.TypeOf(pubKey))
+		}
+		return pb.customPubKeyConverter(pubKey)
 	}
 }
 
@@ -244,4 +260,16 @@ func (pb2tm) ConsensusParams(csp *abci.ConsensusParams) ConsensusParams {
 		// MaxAge: int(csp.Evidence.MaxAge), // XXX
 		// },
 	}
+}
+
+// SetCustomPBPubKeyConverter sets a custom converter that converts a abci.PubKey to a crypto.PubKey
+// when using a type of abci.Pubkey which is not one of the system defaults (keys for curves
+// Edwards 25519 and 'bitcoin' Secp256k1
+//
+// The converter should return an error if the key type is unknown
+//
+// This converter setter should be called together with SetCustomTMPubKeyConverter
+// encoding.RegisterAminoCustomKeys to register the custom key types with amino
+func (pb *pb2tm) SetCustomPBPubKeyConverter(converter PBKeyConverter) {
+	pb.customPubKeyConverter = converter
 }
